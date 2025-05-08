@@ -1,54 +1,45 @@
-# code/data_extraction.py
-
 import requests
 from bs4 import BeautifulSoup
+import pandas as pd
 import json
-import os
 
-def get_jets_stats():
-    url = "https://www.pro-football-reference.com/teams/nyj/2023.htm"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/91.0.4472.114 Safari/537.36"
-    }
-    response = requests.get(url, headers=headers)
+url = 'https://www.pro-football-reference.com/teams/nyj/2023.htm'
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to load page: {response.status_code}")
+response = requests.get(url)
+
+soup = BeautifulSoup(response.content, 'html.parser')
+
+tables = soup.find_all('table')
+
+all_tables_data = {}
+
+for i, table in enumerate(tables):
+    print(f"Processing Table {i}: {table.caption.string if table.caption else 'No caption'}")
     
-    soup = BeautifulSoup(response.content, "html.parser")
-    
-    with open("cache/raw.data.html", "w", encoding="utf-8") as f:
-        f.write(soup.prettify())
-        print("Saved raw HTML to cache/raw.data.html")
+    headers = [header.get_text(strip=True) for header in table.find_all('th')]
+    print(f"Headers found: {headers}")
 
-    return soup
+    rows = []
 
-def extract_stats(soup):
-    stats = {}
+    for row in table.find_all('tr')[1:]:
+        columns = row.find_all('td')
+        
+        if len(columns) == len(headers):
+            rows.append([col.get_text(strip=True) for col in columns])
+        else:
+            print(f"Skipping row due to mismatched columns: {[col.get_text(strip=True) for col in columns]}")
+            if len(columns) < len(headers):
+                columns.extend([None] * (len(headers) - len(columns)))
+            elif len(columns) > len(headers):
+                columns = columns[:len(headers)]
+            
+            rows.append([col.get_text(strip=True) if col else None for col in columns])
 
-    table = soup.find("table", id="team_stats")
-    if table is None:
-        print("Warning: Could not find table with id='team_stats'")
-        return stats
-    
-    for row in table.find_all("tr"):
-        cells = row.find_all("td")
-        if len(cells) == 2:
-            stat_name = cells[0].text.strip()
-            stat_value = cells[1].text.strip()
-            stats[stat_name] = stat_value
+    df = pd.DataFrame(rows, columns=headers)
 
-    return stats
+    all_tables_data[f"table_{i}"] = df.to_dict(orient="records")
 
-def save_stats_to_json(stats, filename="cache/jets_stats.json"):
-    os.makedirs("cache", exist_ok=True)
-    with open(filename, "w") as f:
-        json.dump(stats, f, indent=2)
-    print(f"Saved stats to {filename}")
+with open('jets_stats.json', 'w') as json_file:
+    json.dump(all_tables_data, json_file, indent=4)
 
-if __name__ == "__main__":
-    soup = get_jets_stats()
-    stats = extract_stats(soup)
-    save_stats_to_json(stats)
+print("Tables have been successfully saved in jets_stats.json.")

@@ -1,35 +1,47 @@
 import json
 import os
+import pandas as pd
 
-def load_raw_stats(filename="cache/jets_stats.json"):
-    with open(filename, "r") as f:
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "../cache")
+INPUT_FILE = os.path.join(CACHE_DIR, "jets_stats.json") 
+OUTPUT_FILE = os.path.join(CACHE_DIR, "jets_cleaned_stats.json")  
+
+def transform_data():
+    with open(INPUT_FILE, "r") as f:
         data = json.load(f)
-    return data
 
-def clean_stats(raw_stats):
-    cleaned = {}
+    print(f"Data type: {type(data)}")  
+    print(f"Keys in data: {data.keys()}")  
 
-    for key, value in raw_stats.items():
-        clean_key = key.strip().lower().replace(" ", "_").replace("%", "percent")
+    all_data = []
+    for key in data.keys():
+        if isinstance(data[key], list):
+            for entry in data[key]:
+                if isinstance(entry, dict): 
+                    all_data.append(entry)
+                else:
+                    print(f"Warning: Entry in {key} is not a dictionary: {entry}")
+        else:
+            print(f"Warning: Data under {key} is not a list.")
 
-        value = value.replace(",", "")
-        try:
-            if "." in value:
-                clean_value = float(value)
-            else:
-                clean_value = int(value)
-        except ValueError:
-            clean_value = value
+    expected_columns = ["Wins", "Losses", "Points For", "Points Against"]
+    for entry in all_data:
+        for column in expected_columns:
+            if column not in entry:
+                entry[column] = None 
 
-        cleaned[clean_key] = clean_value
-    return cleaned
+    df = pd.DataFrame(all_data)
 
-def save_cleaned_stats(stats, filename="cache/jets_cleaned_stats.json"):
-    with open(filename, "w") as f:
-        json.dump(stats, f, indent=2)
-    print(f"Saved cleaned stats to {filename}")
+    df.fillna(0, inplace=True)
+
+    df["Wins"] = df["Wins"].astype(int)
+    df["Losses"] = df["Losses"].astype(int)
+    df["Points For"] = df["Points For"].astype(int)
+    df["Points Against"] = df["Points Against"].astype(int)
+
+    df.to_json(OUTPUT_FILE, orient="records", indent=2)
+
+    print(f" Transformed data written to: {OUTPUT_FILE}")
 
 if __name__ == "__main__":
-    raw_stats = load_raw_stats()
-    cleaned_stats = clean_stats(raw_stats)
-    save_cleaned_stats(cleaned_stats)
+    transform_data()
