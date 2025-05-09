@@ -1,47 +1,33 @@
+import pandas as pd
 import json
 import os
-import pandas as pd
 
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "../cache")
-INPUT_FILE = os.path.join(CACHE_DIR, "jets_stats.json") 
-OUTPUT_FILE = os.path.join(CACHE_DIR, "jets_cleaned_stats.json")  
+cache_dir = os.path.join(os.path.dirname(__file__), "../cache")
+input_path = os.path.join(cache_dir, "jets_stats.json")
+with open(input_path, 'r') as f:
+    raw_data = json.load(f)
 
-def transform_data():
-    with open(INPUT_FILE, "r") as f:
-        data = json.load(f)
+cleaned_data = {}
 
-    print(f"Data type: {type(data)}")  
-    print(f"Keys in data: {data.keys()}")  
+def clean_dataframe(table_data):
+    df = pd.DataFrame(table_data)
+    df = df.dropna(how='all')
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='ignore')
+    return df
 
-    all_data = []
-    for key in data.keys():
-        if isinstance(data[key], list):
-            for entry in data[key]:
-                if isinstance(entry, dict): 
-                    all_data.append(entry)
-                else:
-                    print(f"Warning: Entry in {key} is not a dictionary: {entry}")
-        else:
-            print(f"Warning: Data under {key} is not a list.")
+for key, table in raw_data.items():
+    cleaned_df = clean_dataframe(table)
+    cleaned_data[key] = cleaned_df
 
-    expected_columns = ["Wins", "Losses", "Points For", "Points Against"]
-    for entry in all_data:
-        for column in expected_columns:
-            if column not in entry:
-                entry[column] = None 
+output_dir = os.path.join(os.path.dirname(__file__), "../data")
+os.makedirs(output_dir, exist_ok=True)
 
-    df = pd.DataFrame(all_data)
+for key, df in cleaned_data.items():
+    df.to_json(os.path.join(output_dir, f"{key}.json"), orient="records", indent=2)
 
-    df.fillna(0, inplace=True)
+all_data_path = os.path.join(output_dir, "jets_stats_cleaned.json")
+with open(all_data_path, 'w') as f:
+    json.dump({k: v.to_dict(orient="records") for k, v in cleaned_data.items()}, f, indent=2)
 
-    df["Wins"] = df["Wins"].astype(int)
-    df["Losses"] = df["Losses"].astype(int)
-    df["Points For"] = df["Points For"].astype(int)
-    df["Points Against"] = df["Points Against"].astype(int)
-
-    df.to_json(OUTPUT_FILE, orient="records", indent=2)
-
-    print(f" Transformed data written to: {OUTPUT_FILE}")
-
-if __name__ == "__main__":
-    transform_data()
+print("Cleaned data saved to /data directory.")

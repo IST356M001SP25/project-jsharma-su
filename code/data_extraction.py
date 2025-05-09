@@ -2,44 +2,43 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import json
+import os
 
 url = 'https://www.pro-football-reference.com/teams/nyj/2023.htm'
-
 response = requests.get(url)
-
 soup = BeautifulSoup(response.content, 'html.parser')
 
-tables = soup.find_all('table')
+table_ids = ['team_stats', 'passing', 'rushing', 'receiving']
+extracted_data = {}
 
-all_tables_data = {}
+for table_id in table_ids:
+    table = soup.find('table', id=table_id)
+    if not table:
+        print(f"Table with ID '{table_id}' not found.")
+        continue
 
-for i, table in enumerate(tables):
-    print(f"Processing Table {i}: {table.caption.string if table.caption else 'No caption'}")
-    
-    headers = [header.get_text(strip=True) for header in table.find_all('th')]
-    print(f"Headers found: {headers}")
+    headers = [th.get_text(strip=True) for th in table.find('thead').find_all('th')]
+    headers = headers[1:]
 
     rows = []
+    for row in table.find('tbody').find_all('tr'):
+        if row.get('class') == ['thead']:
+            continue
+        cols = row.find_all(['td', 'th'])
+        if not cols:
+            continue
+        row_data = [col.get_text(strip=True) for col in cols]
+        rows.append(dict(zip(headers, row_data)))
 
-    for row in table.find_all('tr')[1:]:
-        columns = row.find_all('td')
-        
-        if len(columns) == len(headers):
-            rows.append([col.get_text(strip=True) for col in columns])
-        else:
-            print(f"Skipping row due to mismatched columns: {[col.get_text(strip=True) for col in columns]}")
-            if len(columns) < len(headers):
-                columns.extend([None] * (len(headers) - len(columns)))
-            elif len(columns) > len(headers):
-                columns = columns[:len(headers)]
-            
-            rows.append([col.get_text(strip=True) if col else None for col in columns])
+    extracted_data[table_id] = rows
 
-    df = pd.DataFrame(rows, columns=headers)
+cache_dir = os.path.join(os.path.dirname(__file__), "../cache")
+os.makedirs(cache_dir, exist_ok=True)
 
-    all_tables_data[f"table_{i}"] = df.to_dict(orient="records")
+for table_id, data in extracted_data.items():
+    output_path = os.path.join(cache_dir, f"{table_id}.json")
+    with open(output_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    print(f"Saved {table_id} data to {output_path}")
 
-with open('jets_stats.json', 'w') as json_file:
-    json.dump(all_tables_data, json_file, indent=4)
-
-print("Tables have been successfully saved in jets_stats.json.")
+print(f"Successfully saved extracted tables to {output_path}")

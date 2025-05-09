@@ -1,7 +1,7 @@
 # About My Project
 
-Student Name:  name
-Student Email:  email
+Student Name:  Jiya Sharma
+Student Email:  jsharma@syr.edu
 
 ### What it does
 
